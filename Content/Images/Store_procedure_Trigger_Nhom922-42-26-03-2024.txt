@@ -1,0 +1,572 @@
+--STORE PROCEDURE
+--CRUD cho bang DOITUONG 
+SET SERVEROUTPUT ON
+--Them du lieu moi vao bang DOITUONG - CREATE 
+CREATE OR REPLACE PROCEDURE insert_doi_tuong (
+    p_ma_doi_tuong IN DOITUONG.MaDoiTuong%TYPE,
+    p_ten_doi_tuong IN DOITUONG.TenDoiTuong%TYPE
+)
+IS
+BEGIN
+    INSERT INTO DOITUONG (MaDoiTuong, TenDoiTuong)
+    VALUES (p_ma_doi_tuong, p_ten_doi_tuong);
+    COMMIT;
+EXCEPTION
+    WHEN DUP_VAL_ON_INDEX THEN
+        DBMS_OUTPUT.PUT_LINE('Error: Ma doi tuong da ton tai.');
+END;
+/
+
+--Insert du lieu dung 
+exec insert_doi_tuong(6,'Cong nhan vien chuc');
+--Insert du lieu sai 
+exec insert_doi_tuong(1,'Cong nhan lao dong');
+
+--Doc du lieu tu bang DOITUONG - READ 
+CREATE OR REPLACE PROCEDURE Select_id_doituong (
+    p_select_id_doituong doituong.madoituong%type
+)
+IS
+    v_count NUMBER;
+BEGIN
+    SELECT COUNT(*)
+    INTO v_count
+    FROM doituong
+    WHERE madoituong = p_select_id_doituong;
+
+    IF v_count > 0 THEN
+        FOR doituong_record IN (SELECT * FROM doituong WHERE madoituong = p_select_id_doituong) LOOP 
+            DBMS_OUTPUT.PUT_LINE(doituong_record.tendoituong);
+        END LOOP;
+    ELSE
+        DBMS_OUTPUT.PUT_LINE('Error: Khong tim thay doi tuong co ma : ' || p_select_id_doituong);
+    END IF;
+END;
+/
+
+--Cau lenh thuc thi dung 
+EXEC Select_id_doituong(6);
+
+--Cau lenh thuc thi sai 
+EXEC Select_id_doituong(7);
+
+--Cap nhat ten cho bang DOITUONG - UPDATE 
+CREATE OR REPLACE PROCEDURE update_doi_tuong (
+    p_ma_doi_tuong IN DOITUONG.MaDoiTuong%TYPE,
+    p_ten_doi_tuong IN DOITUONG.TenDoiTuong%TYPE
+)
+IS
+BEGIN
+    UPDATE DOITUONG
+    SET TenDoiTuong = p_ten_doi_tuong
+    WHERE MaDoiTuong = p_ma_doi_tuong;
+    IF SQL%ROWCOUNT = 0 THEN
+        DBMS_OUTPUT.PUT_LINE('Error: Khong tim thay doi tuong co ma ' || p_ma_doi_tuong);
+    END IF;
+    COMMIT;
+END;
+/
+--Update du lieu dung 
+EXECUTE update_doi_tuong(1, 'Ten moi cho doi tuong 1');
+--Update du lieu sai
+EXECUTE update_doi_tuong(7, 'Ten moi cho doi tuong 7');
+
+
+--Xoa du lieu cua bang DOITUONG - DELETE
+--Kiem tra ma doi tuong xem co ton tai trong bang doc gia hay khong moi duoc xoa 
+CREATE OR REPLACE PROCEDURE delete_doi_tuong (
+    p_ma_doi_tuong IN DOITUONG.MaDoiTuong%TYPE
+)
+IS
+    v_count NUMBER;
+BEGIN
+    -- Kiem tra xem bang DOITUONG co lien quan toi bang DOCGIA khong
+    SELECT COUNT(*)
+    INTO v_count
+    FROM DOCGIA
+    WHERE MaDoiTuong = p_ma_doi_tuong;
+
+    -- Neu dang ton tai thi thong bao khong the xoa
+    IF v_count > 0 THEN
+        DBMS_OUTPUT.PUT_LINE('Error: Khong the xoa doi tuong nay vi no dang duoc su dung trong bang DOCGIA.');
+    ELSE
+        -- Neu khong lien quan thi cho xoa
+        DELETE FROM DOITUONG
+        WHERE MaDoiTuong = p_ma_doi_tuong;
+        
+        -- Kiem tra xem co id do khong 
+        IF SQL%ROWCOUNT = 0 THEN
+            DBMS_OUTPUT.PUT_LINE('Error: Khong tim thay doi tuong co ma ' || p_ma_doi_tuong);
+        ELSE
+            DBMS_OUTPUT.PUT_LINE('Xoa doi tuong thanh cong.');
+        END IF;
+    END IF;
+    
+    -- Commit thay doi
+    COMMIT;
+EXCEPTION
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('Error: ' || SQLERRM);
+        ROLLBACK;
+END;
+/
+--Delete du lieu dung 
+EXECUTE delete_doi_tuong(2);
+--Delete du lieu sai 
+EXECUTE delete_doi_tuong(6);
+
+---Procedure lien quan toi nghiep vu va xuat bao cao dinh ki 
+-------Lap phieu muon tra---
+create or replace PROCEDURE LapPhieuMuonTra (
+    p_SoPhieu in NUMBER,
+    p_NgayMuon IN DATE,
+    p_NgayHetHan IN DATE,
+    p_MaDocGia IN NUMBER,
+    p_ListMaISBN IN VARCHAR2
+)
+IS
+    
+    v_CountPhieu NUMBER; 
+    v_CuonSachTrangThai VARCHAR2(20);
+BEGIN
+  SELECT COUNT(*) INTO v_CountPhieu
+    FROM CuonSach c, dausach d
+    WHERE c.madausach =d.MaDauSach  AND TrangThai = 'Dang muon';
+
+    IF v_CountPhieu >0 THEN
+        RAISE_APPLICATION_ERROR(-20010,'cuon sach ban muon khong con san ');
+        RETURN;
+    END IF;
+  
+    SELECT COUNT(*) INTO v_CountPhieu
+    FROM Phieumuontra
+    WHERE NgayMuon = p_NgayMuon AND NgayHetHan = p_NgayHetHan AND MaDocGia = p_MaDocGia;
+
+    IF v_CountPhieu > 0 THEN
+        
+        INSERT INTO PMT_CuonSach (SoPhieu, MaISBN)
+        VALUES (p_SoPhieu,p_ListMaISBN);
+
+    ELSE
+        
+        INSERT INTO Phieumuontra(NgayMuon, NgayHetHan,SoPhieu, MaDocGia)
+        VALUES (p_NgayMuon, p_NgayHetHan,p_SoPhieu, p_MaDocGia );
+        
+
+            
+            INSERT INTO PMT_CuonSach (SoPhieu, MaISBN)
+            VALUES (p_SoPhieu, p_ListMaISBN);
+
+    END IF;
+
+    COMMIT;
+    UPDATE CuonSach
+    SET TrangThai = 'Dang muon'
+    WHERE MaISBN = p_ListMaISBN;
+
+    DBMS_OUTPUT.PUT_LINE('Lap phieu muon thanh cong ');
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        DBMS_OUTPUT.PUT_LINE('Lap phieu muon tra that bai ' || SQLERRM);
+END ;
+
+---- du lieu sai----
+BEGIN 
+    LapPhieuMuonTra( 15, TO_DATE('2024-03-08', 'YYYY-MM-DD'), TO_DATE('2024-03-15', 'YYYY-MM-DD'),5,121212);
+END;
+---du lieu dung----
+BEGIN 
+    LapPhieuMuonTra( 15, TO_DATE('2024-03-08', 'YYYY-MM-DD'), TO_DATE('2024-03-15', 'YYYY-MM-DD'),5,444444);
+END;
+--------------------Chuyen trang thai muon va trang thai cuon sach ---------------
+CREATE OR REPLACE PROCEDURE CapNhatTrangThaiTraSach(
+    p_ID_Muon NUMBER
+) IS
+ v_SoPhieu NUMBER;
+BEGIN
+    select SoPhieu into v_SoPhieu
+    from quatrinhmuon
+    where id_muon=p_ID_Muon;
+   
+    UPDATE QuaTrinhMuon
+    SET TrangThai='Da tra'
+    WHERE ID_Muon=p_ID_Muon;
+
+    
+    UPDATE CuonSach
+    SET TrangThai = 'San co'
+    WHERE MaISBN = (
+        SELECT MaISBN
+        FROM pmt_cuonsach
+        WHERE SoPhieu = v_SoPhieu  
+    );
+    COMMIT;
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        DBMS_OUTPUT.PUT_LINE('Khong tim thay thong tin phieu muon');
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE;
+END;
+/
+----dung----
+exec CapNhatTrangThaiTraSach(10);
+----sai----
+exec CapNhatTrangThaiTraSach(123);
+
+----------Chuyen thong tin sang bang qua trinh muon va tinh tien no----
+create or replace PROCEDURE ChuyenThongTinMuonSangQuaTrinhMuon_VaTinhTienNo(
+    p_SoPhieu NUMBER,
+     p_ID_Muon NUMBER
+) AS
+    v_SoNgayTreHan NUMBER;
+    v_TongTien NUMBER;
+    v_NgayMuon DATE;
+    v_NgayHetHan DATE; 
+    v_MaTienPhat NUMBER;
+    v_MaTien NUMBER;
+BEGIN
+    SELECT NgayMuon,NgayHetHan
+    INTO v_NgayMuon, v_NgayHetHan
+    FROM PhieuMuonTra 
+    WHERE SoPhieu=p_SoPhieu;
+
+    v_SoNgayTreHan := GREATEST(TRUNC(SYSDATE - v_NgayHetHan), 0);
+
+IF v_songaytrehan > 3 and v_songaytrehan <5 THEN
+    v_matien := 1;
+ELSIF v_songaytrehan > 5 and v_songaytrehan <7 THEN
+    v_matien := 2;
+ELSIF v_songaytrehan > 7 THEN
+    v_matien := 3;
+END IF;
+    SELECT GiaTien * v_SoNgayTreHan, MaTienPhat
+    INTO v_TongTien,v_matienphat
+    FROM TienPhat
+    WHERE MaTienPhat = v_MaTien;
+
+    INSERT INTO QuaTrinhMuon(ID_Muon, NgayDenTra, TongTien, MaTienPhat, SoPhieu, TrangThai) 
+    VALUES (p_ID_Muon,SYSDATE,v_TongTien,v_MaTienPhat,p_SoPhieu,'Dang muon');
+
+    IF v_SoNgayTreHan > 0 THEN
+        UPDATE Quatrinhmuon
+        SET TrangThai = 'No'
+        WHERE  SoPhieu=p_SoPhieu;
+    END IF;
+
+    COMMIT;
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        DBMS_OUTPUT.PUT_LINE('Khong tim thay ma phieu muon.');
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE;
+END ;
+---dung---
+BEGIN
+    ChuyenThongTinMuonSangQuaTrinhMuon_VaTinhTienNo(4, 15);
+END;
+/
+----sai----
+BEGIN
+    ChuyenThongTinMuonSangQuaTrinhMuon_VaTinhTienNo(15, 15);
+END;
+/
+------Thong ke-----
+create or replace PROCEDURE ThongKe (
+    start_date IN DATE,
+    end_date IN DATE
+) AS
+    CURSOR reader_cursor IS
+        SELECT DISTINCT d.MaDocGia, d.HoTen, d.DiaChi, d.SoDienThoai, d.Email
+        FROM DOCGIA d
+        JOIN PhieuMuonTra p ON d.MaDocGia = p.MaDocGia
+        JOIN QuaTrinhMuon q ON p.SoPhieu = q.SoPhieu
+        WHERE q.NgayDenTra BETWEEN start_date AND end_date;
+
+    total_due NUMBER := 0;
+BEGIN
+    FOR reader_record IN reader_cursor LOOP
+        SELECT SUM(q.TongTien) INTO total_due
+        FROM PhieuMuonTra p
+        JOIN QuaTrinhMuon q ON p.SoPhieu = q.SoPhieu
+        WHERE p.MaDocGia = reader_record.MaDocGia
+        AND q.NgayDenTra BETWEEN start_date AND end_date;
+
+        IF total_due != 0 THEN
+            DBMS_OUTPUT.PUT_LINE('Reader ID: ' || reader_record.MaDocGia || ', Name: ' || reader_record.HoTen );
+        END IF;
+    END LOOP;
+    EXCEPTION
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('Loi: ' || SQLERRM);
+END ;
+---du lieu dung ---
+EXEC ThongKe(TO_DATE('2024-01-01', 'YYYY-MM-DD'), TO_DATE('2024-11-01', 'YYYY-MM-DD'));
+
+----TRIGGER------
+Ràng buộc toàn vẹn
+CREATE OR REPLACE TRIGGER KiemTraThemDocGia BEFORE
+    INSERT ON docgia
+    FOR EACH ROW
+BEGIN
+    -- Kiem tra va xu ly  HOTEN
+    IF length(:new.hoten) < 5 THEN
+        raise_application_error(-20010, 'Ho ten qua ngan duoi 5 ky tu');
+    END IF;
+
+    -- Kiem tra va xu ly SODIENTHOAI
+    IF length(:new.sodienthoai) <> 10 THEN
+        raise_application_error(-20011, 'So dien thoai phai co 10 so');
+    END IF;
+
+    -- Kiem tra va xu ly NGAYDANGKY
+    IF :new.ngaydangky > sysdate THEN
+        raise_application_error(-20012, 'Ngay dang ky khong hop le');
+    END IF;
+
+    -- Kiem tra va xu ly NGAYHETHAN
+    IF :new.ngayhethan < :new.ngaydangky THEN
+        raise_application_error(-20013, 'Ngày het han khong hop le');
+    END IF;
+
+    -- Kiem tra va xu ly NGAYSINH
+    IF :new.ngaysinh > sysdate THEN
+        raise_application_error(-20014, 'Ngay sinh khong hop le');
+    END IF;
+
+    -- Kiem tra va xu ly EMAIL
+    IF NOT regexp_like(:new.email, '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$') THEN
+        raise_application_error(-20015, 'Email khong hop le');
+    END IF;
+
+END;
+/
+
+--Dung
+INSERT INTO DOCGIA (MaDocGia, HoTen, DiaChi, SoDienThoai, NgayDangKy, NgayHetHan, NgaySinh, Email, TinhTrangThe, MaDoiTuong)
+VALUES (6, 'Nguyen Van A', '123 ABC Street', '0123456789', '2024-01-01', '2025-01-01', '1990-01-01', 'example@email.com', 1, 1);
+--Sai
+INSERT INTO DOCGIA (MaDocGia, HoTen, DiaChi, SoDienThoai, NgayDangKy, NgayHetHan, NgaySinh, Email, TinhTrangThe, MaDoiTuong)
+VALUES (7, 'A', '123 ABC Street', '0123456789', '2024-01-01', '2025-01-01', '1990-01-01', 'example@email.com', 1, 1);
+
+--------------------------------------------------------------------------------
+CREATE OR REPLACE TRIGGER KiemTraNgayMuon
+BEFORE INSERT ON PhieuMuonTra
+FOR EACH ROW
+DECLARE
+    v_loan_date DATE;
+    v_due_date DATE;
+BEGIN
+    -- L?y ngày m??n và ngày h?t h?n t? dòng m?i ???c chèn
+    v_loan_date := :NEW.NgayMuon;
+    v_due_date := :NEW.NgayHetHan;
+
+    -- Ki?m tra n?u ngày h?t h?n tr??c ho?c cùng ngày v?i ngày m??n
+    IF v_due_date <= v_loan_date THEN
+        -- N?u có, ném m?t ngo?i l? và không cho phép chèn dòng ?ó vào b?ng
+        RAISE_APPLICATION_ERROR(-20001, 'Ngay het han phai sau ngay muon!!!');
+    END IF;
+END;
+/
+
+--Dung
+INSERT INTO PhieuMuonTra (SoPhieu, MaDocGia, NgayMuon, NgayHetHan)
+VALUES (13, 1, '2024-01-01', '2024-01-15');
+--Sai
+INSERT INTO PhieuMuonTra (SoPhieu, MaDocGia, NgayMuon, NgayHetHan)
+VALUES (14, 1, '2024-01-01', '2023-01-15');
+
+--------------------------------------------------------------------------------
+CREATE OR REPLACE TRIGGER KiemTraNgayTra
+BEFORE INSERT ON QuaTrinhMuon
+FOR EACH ROW
+DECLARE
+    v_return_date DATE;
+BEGIN
+    
+    v_return_date := :NEW.NgayDenTra;
+
+    
+    IF v_return_date > SYSDATE THEN
+        
+        RAISE_APPLICATION_ERROR(-20001, 'Ngay den tra sach khong hop le!!!');
+    END IF;
+END;
+/
+
+--Dung
+INSERT INTO QuaTrinhMuon (ID_Muon, NgayDenTra, TongTien, MaTienPhat, SoPhieu, TrangThai)
+VALUES (13, '2024-01-15', 0, NULL, 1, 'Dang muon');
+
+--Sai
+INSERT INTO QuaTrinhMuon (ID_Muon, NgayDenTra, TongTien, MaTienPhat, SoPhieu, TrangThai)
+VALUES (14, '2024-09-15', 0, NULL, 1, 'Dang muon');
+
+--------------------------------------------------------------------------------
+CREATE OR REPLACE TRIGGER KIEMTRA_NGAYMUON_SACH
+BEFORE INSERT OR UPDATE ON PhieuMuonTra
+FOR EACH ROW
+DECLARE
+    v_max_borrowing_days NUMBER := 14; 
+    v_current_date DATE;
+BEGIN
+    
+    IF INSERTING THEN
+        v_current_date := SYSDATE; 
+    ELSE
+        v_current_date := :OLD.NgayMuon; 
+    END IF;
+    
+    IF INSERTING OR (:NEW.NgayMuon <> :OLD.NgayMuon) THEN
+        IF (v_current_date - :NEW.NgayMuon) > v_max_borrowing_days THEN
+            RAISE_APPLICATION_ERROR(-20001, 'Khong the muon sach qua ' || v_max_borrowing_days || ' ngay.');
+        END IF;
+    END IF;
+
+    
+    IF INSERTING THEN
+        INSERT INTO QuaTrinhMuon (TrangThai, NgayDenTra, TongTien, ID_Muon, MaTienPhat, SoPhieu)
+        VALUES ('Dang muon', :NEW.NgayHetHan, 0, :OLD.ID_Muon + 1, NULL, :NEW.SoPhieu);
+    END IF;
+END;
+/
+
+--Dung
+INSERT INTO PhieuMuonTra (SoPhieu, MaDocGia, NgayMuon, NgayHetHan)
+VALUES (3, 1, '2024-01-01', '2024-01-15');
+
+UPDATE PhieuMuonTra SET NgayMuon = '2024-01-02' WHERE SoPhieu = 3;
+
+--Sai
+INSERT INTO PhieuMuonTra (SoPhieu, MaDocGia, NgayMuon, NgayHetHan)
+VALUES (4, 2, '2024-01-01', '2024-01-20');
+
+--------------------------------------------------------------------------------
+CREATE OR REPLACE TRIGGER CapNhatMaDoiTuong
+BEFORE INSERT OR UPDATE ON docgia
+FOR EACH ROW
+DECLARE
+    v_age NUMBER;
+BEGIN
+    
+    v_age := EXTRACT(YEAR FROM sysdate) - EXTRACT(YEAR FROM :NEW.ngaysinh);
+
+    
+    IF v_age < 18 THEN
+        :NEW.MaDoiTuong := 1;
+    ELSIF v_age >= 18 AND v_age <= 22 THEN
+        :NEW.MaDoiTuong := 2;
+    ELSE
+        :NEW.MaDoiTuong := 5;
+    END IF;
+END;
+/
+
+INSERT INTO docgia (MaDocGia, HoTen, DiaChi, SoDienThoai, NgayDangKy, NgayHetHan, NgaySinh, Email, TinhTrangThe, MaDoiTuong)
+VALUES (6, 'Nguyen Thi B', '456 XYZ Street', '0987654321', to_date('2024-01-01', 'yyyy-mm-dd'), to_date('2025-01-01','yyyy-mm-dd'), to_date('2010-05-20','yyyy-mm-dd'), 'nguyenthib@example.com', 1, NULL);
+
+UPDATE docgia
+SET NgaySinh = to_date('2000-03-15','yyyy-mm-dd')
+WHERE MaDocGia = 6;
+
+
+--------------------------------------------------------------------------------
+
+
+Bảo vệ dữ liệu
+CREATE OR REPLACE TRIGGER CAPNHAT_SOLUONG_TUASACH
+AFTER INSERT OR DELETE ON DauSach
+FOR EACH ROW
+DECLARE
+    v_tua_sach_id NUMBER;
+    v_total_books NUMBER;
+BEGIN
+    IF INSERTING THEN 
+        v_tua_sach_id := :NEW.MaTuaSach; 
+
+        
+        SELECT SUM(SoLuong) INTO v_total_books FROM DauSach WHERE MaTuaSach = v_tua_sach_id;
+
+        
+        UPDATE TuaSach SET SoLuong = v_total_books WHERE MaTuaSach = v_tua_sach_id;
+    ELSIF DELETING THEN
+        v_tua_sach_id := :OLD.MaTuaSach; 
+
+       
+        SELECT SUM(SoLuong) INTO v_total_books FROM DauSach WHERE MaTuaSach = v_tua_sach_id;
+
+        
+        UPDATE TuaSach SET SoLuong = v_total_books WHERE MaTuaSach = v_tua_sach_id;
+    END IF;
+END;
+/
+
+-- Them moi dau sach
+INSERT INTO DauSach (MaDauSach, Bia, NgonNgu, SoLuong, MaNXB, MaTuaSach)
+VALUES (1, 'Bia sach', 'Tieng Viet', 50, 1, 1);
+
+-- Xoa dau sach
+DELETE FROM DauSach WHERE MaDauSach = 2;
+
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE TRIGGER CapNhatTrangThaiCuonSach
+AFTER INSERT OR UPDATE ON PMT_CuonSach
+FOR EACH ROW
+BEGIN
+    IF :NEW.SoPhieu IS NOT NULL THEN
+        UPDATE CuonSach
+        SET TrangThai = 'Dang muon'
+        WHERE MaISBN = :NEW.MaISBN;
+    ELSE
+        UPDATE CuonSach
+        SET TrangThai = 'San co'
+        WHERE MaISBN = :NEW.MaISBN;
+    END IF;
+END;
+/
+
+INSERT INTO PMT_CuonSach (SoPhieu, MaISBN) VALUES (1, 123456);
+
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE TRIGGER CheckMaxBorrow
+BEFORE INSERT ON PhieuMuonTra
+FOR EACH ROW
+DECLARE
+    total_books NUMBER;
+BEGIN
+    SELECT COUNT(*) INTO total_books
+    FROM PMT_CuonSach p
+    INNER JOIN PhieuMuonTra pm ON p.SoPhieu = pm.SoPhieu
+    WHERE pm.MaDocGia = :NEW.MaDocGia;
+
+    IF total_books >= 5 THEN
+        RAISE_APPLICATION_ERROR(-20001, 'Doc gia nay da muon qua so sach quy dinh');
+    END IF;
+END;
+/
+
+-- Tao 1 doc gia vao bang DOCGIA
+INSERT INTO DOCGIA (MaDocGia, HoTen, DiaChi, SoDienThoai, NgayDangKy, NgayHetHan, NgaySinh, Email, TinhTrangThe, MaDoiTuong)
+VALUES (6, 'Tran Van F', '456 Le Lai, Quan 3, TP. Ho Chi Minh', '0987654321', TO_DATE('2024-01-01', 'YYYY-MM-DD'), TO_DATE('2025-01-01', 'YYYY-MM-DD'), TO_DATE('1992-01-01', 'YYYY-MM-DD'), 'tranvanf@example.com', 1, 2);
+
+-- Them thong tin phieu muon vao bang PhieuMuonTra
+INSERT INTO PhieuMuonTra (NgayMuon, NgayHetHan, SoPhieu, MaDocGia)
+VALUES (TO_DATE('2024-03-08', 'YYYY-MM-DD'), TO_DATE('2024-03-15', 'YYYY-MM-DD'), 13, 6);
+
+-- Them thong tin muon sach vao bang PMT_CuonSach
+INSERT INTO PMT_CuonSach (SoPhieu, MaISBN) VALUES (13, 111112);
+INSERT INTO PMT_CuonSach (SoPhieu, MaISBN) VALUES (13, 222223);
+INSERT INTO PMT_CuonSach (SoPhieu, MaISBN) VALUES (13, 333334);
+INSERT INTO PMT_CuonSach (SoPhieu, MaISBN) VALUES (13, 444445);
+INSERT INTO PMT_CuonSach (SoPhieu, MaISBN) VALUES (13, 555556);
+
+
+
+
+
+
+
